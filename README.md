@@ -1,96 +1,148 @@
-# CRM Data Reliability — Lead Intake
+# CRM Data Reliability Platform
 
-An n8n workflow that validates, normalizes, deduplicates, and synchronizes inbound CRM leads to HubSpot. It tracks every new lead in an n8n Data Table, records HubSpot outcomes, retries transient failures, and sends exhausted failures to a dead-letter queue for follow-up.
+> A production-style n8n workflow that protects CRM data quality before synchronizing leads to HubSpot.
 
-## What this project demonstrates
+[![n8n](https://img.shields.io/badge/Automation-n8n-EA4B71)](https://n8n.io/)
+[![HubSpot](https://img.shields.io/badge/CRM-HubSpot-FF7A59)](https://www.hubspot.com/)
+[![Status](https://img.shields.io/badge/Status-Completed-2EA44F)](#verified-results)
 
-- Webhook-based lead intake
-- Payload normalization and email validation
-- Case-insensitive deduplication
-- Idempotent HubSpot contact creation/update
-- Correlation IDs for end-to-end traceability
-- Retry handling with a dead-letter queue
-- Persistent CRM sync statuses and error details
-- Separate success, duplicate, rejection, and failure paths
+## Executive summary
 
-## Architecture
+Sales and marketing teams lose time when web forms create incomplete, duplicated, or unsynchronized CRM records. This project solves that reliability problem at the point of intake.
+
+Every lead is normalized and validated, checked for duplicates, recorded for traceability, and then synchronized to HubSpot. Successful records store their HubSpot contact ID. Failed CRM calls are retried automatically and preserved in a dead-letter queue instead of being silently lost.
+
+### Business value
+
+| Risk | How the workflow addresses it | Business impact |
+|---|---|---|
+| Bad form data reaches the CRM | Validates required fields and email format | Cleaner CRM records and less manual correction |
+| The same lead is created repeatedly | Uses normalized email as a case-insensitive deduplication key | Prevents duplicate contacts and fragmented history |
+| CRM outages cause silent lead loss | Registers the lead before the external API call | Every accepted request remains traceable |
+| Temporary API failures interrupt processing | Retries the HubSpot operation up to three times | Handles transient failures automatically |
+| Permanent failures are forgotten | Records the error and creates an open dead-letter item | Gives operations teams a clear recovery queue |
+| Troubleshooting spans multiple systems | Assigns a correlation ID to every accepted request | Faster investigation from webhook to CRM outcome |
+
+## What I built
+
+I designed and implemented the complete 14-node workflow, including:
+
+- webhook-based lead intake and payload normalization;
+- required-field and email-format validation;
+- deterministic, case-insensitive duplicate prevention;
+- persistent lead registration before the CRM call;
+- native HubSpot contact creation or update;
+- success and failure status tracking in n8n Data Tables;
+- three-attempt retry handling with a two-second delay;
+- dead-letter queue routing for failures that require attention; and
+- production and controlled-failure test scenarios.
+
+## Verified results
+
+The workflow was tested end to end with the following outcomes:
+
+| Test | Verified outcome |
+|---|---|
+| Valid, unique lead | HubSpot contact created or updated; registry changed from `PENDING_CRM` to `SYNCED`; HubSpot ID stored |
+| Repeated email | Duplicate branch selected; additional registry and HubSpot contact creation skipped |
+| Missing or malformed required data | Request rejected before reaching HubSpot with a specific validation message |
+| Controlled HubSpot failure | Three attempts made; registry changed to `FAILED_CRM`; error stored; dead-letter record created with `OPEN` status |
+
+This demonstrates practical experience with workflow automation, API integrations, data quality controls, idempotency, observability, and failure recovery.
+
+## Solution architecture
 
 ```mermaid
 flowchart LR
-    A[POST Webhook] --> B[Normalize Lead Payload]
-    B --> C{Validate Required Fields}
-
-    C -- Invalid --> D[Set Rejection Status]
-    C -- Valid --> E[Set Validation Status]
-    E --> F[Build Deduplication Key]
-    F --> G[Check Existing Lead]
-    G --> H{Lead Already Exists?}
-
-    H -- Yes --> I[Set Duplicate Status]
-    H -- No --> J[Register New Lead\nPENDING_CRM]
-    J --> K[Create or Update\nHubSpot Contact]
-
-    K -- Success --> L[Mark CRM Sync Success\nSYNCED + HubSpot ID]
-    K -- Error after retries --> M[Mark CRM Sync Failed\nFAILED_CRM + error]
-    M --> N[Send to CRM Dead Letter Queue\nOPEN, retryCount = 3]
+    A[Lead submitted] --> B[Normalize data]
+    B --> C{Required data valid?}
+    C -- No --> D[Reject with reason]
+    C -- Yes --> E[Create correlation ID]
+    E --> F{Email already registered?}
+    F -- Yes --> G[Skip duplicate]
+    F -- No --> H[Register as PENDING_CRM]
+    H --> I[Create or update HubSpot contact]
+    I -- Success --> J[Mark SYNCED and store HubSpot ID]
+    I -- Failure after 3 attempts --> K[Mark FAILED_CRM and store error]
+    K --> L[Add OPEN dead-letter item]
 ```
 
-## Workflow behavior
+## Recruiter-friendly walkthrough
 
-### 1. Normalize the payload
+1. A lead enters through an HTTP webhook.
+2. The workflow standardizes text, email, country, source, and tracking fields.
+3. Invalid requests stop early with a clear rejection reason.
+4. A normalized email prevents the same person from being registered twice.
+5. A valid new lead is saved locally before HubSpot is contacted.
+6. HubSpot creates or updates the contact using the native n8n integration.
+7. Success stores the HubSpot ID; failure stores the error and creates a recovery task.
 
-The workflow trims text fields, lowercases the email address, uppercases the country code, assigns a default source when needed, and generates:
+The result is a small but complete reliability layer between a lead source and a CRM.
 
-- `correlationId`: `LEAD-<timestamp>`
-- `receivedAt`: request receipt time
+## Technical capabilities demonstrated
 
-### 2. Validate required fields
+- **Integration:** REST webhooks, JSON mapping, native HubSpot integration
+- **Data quality:** normalization, required-field rules, email validation
+- **Reliability:** idempotency, retries, persistent status tracking, dead-letter queue
+- **Troubleshooting:** correlation IDs, captured API errors, explicit success and error paths
+- **Operations:** production webhook testing, controlled failure testing, recoverable failed records
+- **Security:** credential references without committed tokens and least-privilege guidance
 
-The request proceeds only when all three conditions are true:
+## Workflow status model
 
-- Email is present
-- Company is present
-- Email matches a valid email-format expression
+| Status | Meaning |
+|---|---|
+| `VALID` | Required-field validation passed |
+| `REJECTED` | Required-field or email-format validation failed |
+| `PENDING_CRM` | Lead was registered and is waiting for the CRM result |
+| `SYNCED` | HubSpot synchronization succeeded |
+| `FAILED_CRM` | HubSpot synchronization failed after all retries |
+| `SKIPPED_DUPLICATE` | An existing lead was detected and CRM creation was skipped |
 
-Rejected requests receive `validationStatus: REJECTED` with a specific reason such as `Email is missing`, `Email format is invalid`, or `Company is missing`.
+## Reliability design decisions
 
-### 3. Prevent duplicates
+- **Register before sync:** accepted leads are stored before the external CRM call, preventing silent loss during outages.
+- **Normalize before matching:** lowercase, trimmed email values provide deterministic duplicate detection.
+- **Correlate every request:** the same identifier connects intake, registry updates, and failure records.
+- **Separate outcomes:** dedicated success and error paths make the final state explicit.
+- **Retry before escalation:** transient failures receive three attempts before entering the dead-letter queue.
+- **Update only intended columns:** status nodes avoid overwriting unrelated values with nulls.
 
-The normalized lowercase email becomes the `dedupeKey`. The workflow performs a case-insensitive lookup in `lead_registry` and returns at most one matching row.
+## Technology used
 
-- Existing lead: CRM creation is skipped and the workflow returns `SKIPPED_DUPLICATE`.
-- New lead: a registry row is inserted with `PENDING_CRM` before HubSpot synchronization begins.
+| Technology | Purpose |
+|---|---|
+| n8n | Workflow orchestration and error routing |
+| n8n Data Tables | Lead registry and dead-letter queue |
+| HubSpot native node | CRM contact creation and update |
+| Webhooks and JSON | Lead intake and field mapping |
+| cURL | End-to-end API testing |
 
-### 4. Synchronize with HubSpot
+## Repository contents
 
-The native n8n HubSpot node creates or updates a contact using email and maps:
+```text
+.
+├── README.md
+└── n8n-workflows/
+    └── crm-data-reliability-lead-intake.json
+```
 
-- First name
-- Last name
-- Company
-- Job title
-- Country/region
+The exported workflow is available at [`n8n-workflows/crm-data-reliability-lead-intake.json`](n8n-workflows/crm-data-reliability-lead-intake.json).
 
-The HubSpot node retries failed requests three times with a 2,000 ms wait between attempts.
+---
 
-### 5. Record the final outcome
+## Technical setup
 
-On success, the registry row is updated by `correlationId`:
+The sections below are intended for reviewers who want to import or inspect the implementation.
 
-- `crmStatus`: `SYNCED`
-- `hubspotContactId`: HubSpot `vid` or `id`
+### Prerequisites
 
-After all retry attempts fail:
+- n8n with Data Tables enabled
+- a HubSpot account
+- a HubSpot private app or service-key credential with contact read/write access
+- the two Data Tables described below
 
-- `crmStatus`: `FAILED_CRM`
-- `crmError`: HubSpot error message or a fallback message
-- A row is inserted into `crm_failed_leads` with `retryStatus: OPEN` and `retryCount: 3`
-
-## Data tables
-
-The workflow export does not create the Data Tables automatically. Create these tables before running an imported workflow.
-
-### `lead_registry`
+### Data Table: `lead_registry`
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -100,52 +152,43 @@ The workflow export does not create the Data Tables automatically. Create these 
 | `correlationId` | String | End-to-end request identifier |
 | `crmStatus` | String | `PENDING_CRM`, `SYNCED`, or `FAILED_CRM` |
 | `hubspotContactId` | String, nullable | HubSpot contact identifier |
-| `crmError` | String, nullable | HubSpot synchronization error |
+| `crmError` | String, nullable | Final HubSpot synchronization error |
 
-n8n automatically supplies `id`, `createdAt`, and `updatedAt`.
+n8n supplies `id`, `createdAt`, and `updatedAt` automatically.
 
-### `crm_failed_leads`
+### Data Table: `crm_failed_leads`
 
 | Column | Type | Purpose |
 |---|---|---|
-| `correlationId` | String | Links the failure to `lead_registry` |
+| `correlationId` | String | Connects the failure to `lead_registry` |
 | `email` | String | Failed lead email |
 | `company` | String | Failed lead company |
 | `crmError` | String | Final HubSpot error message |
 | `retryStatus` | String | Operational state, initially `OPEN` |
-| `retryCount` | Number | Number of attempts made, initially `3` |
+| `retryCount` | Number | Attempts made, initially `3` |
 
-n8n automatically supplies `id`, `createdAt`, and `updatedAt`.
+n8n supplies `id`, `createdAt`, and `updatedAt` automatically.
 
-## Prerequisites
+### Import and configure
 
-- n8n with Data Tables enabled
-- A HubSpot account
-- A HubSpot private app or service-key credential with contact read/write access
-- The two Data Tables described above
-
-## Import and configuration
-
-1. Import `n8n-workflows/crm-data-reliability-lead-intake.json` into n8n.
+1. Import [`n8n-workflows/crm-data-reliability-lead-intake.json`](n8n-workflows/crm-data-reliability-lead-intake.json) into n8n.
 2. Create `lead_registry` and `crm_failed_leads` using the schemas above.
-3. Re-select the appropriate Data Table in each Data Table node if the imported table IDs do not match your environment.
-4. Create or select your HubSpot credential in `Create or update a contact`.
-5. Confirm the HubSpot email expression is:
+3. Re-select the appropriate table in each Data Table node because imported table IDs may differ.
+4. Select a HubSpot credential in **Create or update a contact**.
+5. Confirm the HubSpot email expression:
 
    ```javascript
    {{ $('Build Deduplication Key').item.json.email }}
    ```
 
-6. Confirm HubSpot retry settings:
+6. Confirm the HubSpot retry configuration:
 
    - Retry On Fail: enabled
    - Maximum tries: `3`
    - Wait between tries: `2000` ms
-   - On Error: `Continue (using error output)`
+   - On Error: continue using the error output
 
 7. Publish or activate the workflow.
-
-## API usage
 
 ### Production endpoint
 
@@ -153,7 +196,7 @@ n8n automatically supplies `id`, `createdAt`, and `updatedAt`.
 POST http://localhost:5678/webhook/crm-lead-intake
 ```
 
-Replace `localhost:5678` with the public base URL of your n8n instance when deployed remotely.
+Replace `localhost:5678` with the public n8n base URL when deployed remotely.
 
 ### Successful lead test
 
@@ -173,86 +216,25 @@ curl -X POST "http://localhost:5678/webhook/crm-lead-intake" \
 
 Expected result in `lead_registry`:
 
-- `crmStatus` is `SYNCED`
-- `hubspotContactId` is populated
-- `crmError` is null
+- `crmStatus` is `SYNCED`;
+- `hubspotContactId` is populated; and
+- `crmError` is null.
 
-### Duplicate test
+### Additional tests
 
-Send the successful test request again without changing the email address. The workflow should follow the duplicate branch, avoid inserting another registry row, and skip another HubSpot creation.
-
-### Validation-failure test
-
-```bash
-curl -X POST "http://localhost:5678/webhook/crm-lead-intake" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "firstName": "Invalid",
-    "lastName": "Lead",
-    "email": "not-an-email",
-    "company": "ACME Tech Pvt Ltd"
-  }'
-```
-
-Expected result: the request follows `Set Rejection Status` and does not reach HubSpot.
-
-### Controlled CRM-failure test
-
-For a controlled local test only, temporarily replace the HubSpot node's email expression with the fixed value `not-an-email`, execute a request with an otherwise valid unique payload, and verify:
-
-- `lead_registry.crmStatus` becomes `FAILED_CRM`
-- `lead_registry.crmError` is populated
-- `crm_failed_leads.retryStatus` is `OPEN`
-- `crm_failed_leads.retryCount` is `3`
-
-Immediately restore the normal HubSpot email expression after the test.
-
-## Status model
-
-| Status | Meaning |
-|---|---|
-| `VALID` | Required-field validation passed |
-| `REJECTED` | Required-field or email-format validation failed |
-| `PENDING_CRM` | Lead registered; HubSpot sync not yet finalized |
-| `SYNCED` | HubSpot sync succeeded |
-| `FAILED_CRM` | HubSpot sync failed after retries |
-| `SKIPPED_DUPLICATE` | Existing lead detected; CRM creation skipped |
-
-## Reliability design decisions
-
-- The lead is registered before the external CRM call, preventing silent loss during outages.
-- Correlation IDs connect the original request, registry update, and failure queue entry.
-- A normalized email provides deterministic duplicate detection.
-- Separate HubSpot Success and Error outputs make outcomes explicit.
-- Retries handle transient failures; the dead-letter queue preserves failures requiring attention.
-- Updates send only the intended columns, avoiding accidental nulling of existing values.
+- **Duplicate:** send the same successful request again. The duplicate branch should skip another registry row and HubSpot operation.
+- **Validation failure:** use a malformed email or omit the company. The request should stop before HubSpot.
+- **Controlled CRM failure:** temporarily use `not-an-email` as the HubSpot email, run a unique valid request, confirm the failure records, and immediately restore the normal expression.
 
 ## Security notes
 
-- The exported workflow references a credential but does not contain the HubSpot secret itself.
+- The workflow export contains a credential reference, not the HubSpot token itself.
 - Never commit HubSpot tokens, n8n encryption keys, environment files, or production lead data.
-- Use environment-specific n8n credentials and least-privilege HubSpot scopes.
-- Replace demonstration email addresses and remove test records before using the workflow with production data.
-
-## Repository contents
-
-```text
-.
-├── README.md
-├── n8n-workflows/
-│   └── crm-data-reliability-lead-intake.json
-├── dashboard/
-├── documentation/
-└── sample-data/
-```
-
-## Built with
-
-- n8n
-- n8n Data Tables
-- HubSpot native integration
-- Webhooks and JSON
+- Use environment-specific credentials and least-privilege HubSpot scopes.
+- Remove demonstration records before using the workflow with production data.
 
 ## Author
 
-Mohammed Ismail
+**Mohammed Ismail**
+
+Integration and SaaS Support professional focused on reliable API workflows, CRM data quality, troubleshooting, and automation.
