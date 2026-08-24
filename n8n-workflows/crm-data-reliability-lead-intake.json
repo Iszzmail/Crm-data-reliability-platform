@@ -1,0 +1,921 @@
+{
+  "name": "CRM Data Reliability - Lead Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crm-lead-intake",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b20932b5-a011-45d4-b7fa-37ab080b6679",
+      "name": "Webhook",
+      "webhookId": "f96e17be-ca00-4d91-9c75-7b87d39d717b"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3ed9bd39-a659-4896-93d4-af9d6b679562",
+              "name": "firstName",
+              "value": "={{ $json.body.firstName?.trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "6f4e5e19-fa09-4ee3-b2cd-76e81eb1f214",
+              "name": "lastName",
+              "value": "={{ $json.body.lastName?.trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "839a13b4-62de-43e6-800d-1e9f47d16266",
+              "name": "email",
+              "value": "={{ $json.body.email?.trim().toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "72cd7bef-a2d5-468c-ac0c-d70ef02ae9a9",
+              "name": "company",
+              "value": "={{ $json.body.company?.trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "2074b36c-339c-4a63-aa61-543d1ebb04a4",
+              "name": "jobTitle",
+              "value": "={{ $json.body.jobTitle?.trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "fd8b960f-93cc-44e9-a4ed-6ca204864ce2",
+              "name": "country",
+              "value": "={{ $json.body.country?.trim().toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "a3ba150e-0cf2-4a05-8dcc-9acaa0824741",
+              "name": "source",
+              "value": "={{ $json.body.source?.trim() || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "97484cd3-d74e-4a4c-9238-629651dbebce",
+              "name": "correlationId",
+              "value": "={{ 'LEAD-' + Date.now() }}",
+              "type": "string"
+            },
+            {
+              "id": "09fae0cc-0e54-4ef8-ba94-77e4792669b7",
+              "name": "receivedAt",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "a6c7f3bf-a55e-468f-90ee-77d5ec99faa9",
+      "name": "Normalize Lead Payload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7a68e13b-0f82-4c78-8ad1-a42f804dfbdb",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "8875899a-5df9-4f52-b7c9-9c26b63ee390",
+              "leftValue": "={{ $json.company }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "88b8a12c-20f8-4024-97d4-183709a5b984",
+              "leftValue": "={{ /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test($json.email) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        0
+      ],
+      "id": "0875fca4-5039-45aa-bee1-fdd8ecfe4309",
+      "name": "Validate Required Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9e67958c-a416-4313-ac3b-9df3f7f011c6",
+              "name": "validationStatus",
+              "value": "VALID",
+              "type": "string"
+            },
+            {
+              "id": "8285fba8-7677-4948-af78-f8526cf71148",
+              "name": "validationMessage",
+              "value": "Required fields present",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        624,
+        -208
+      ],
+      "id": "9a7e58e1-bbca-4d52-8ba8-f37d7924ebd1",
+      "name": "Set Validation Status"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4c9a2e8f-f375-4e96-9e79-7be3852f006c",
+              "name": "validationStatus",
+              "value": "REJECTED",
+              "type": "string"
+            },
+            {
+              "id": "bfe9de6e-3d03-46c8-826c-8b86e0f14eba",
+              "name": "validationMessage",
+              "value": "={{\n  !$json.email\n    ? 'Email is missing'\n    : !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test($json.email)\n      ? 'Email format is invalid'\n      : !$json.company\n        ? 'Company is missing'\n        : 'Validation failed'\n}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "include": "=all",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        704,
+        128
+      ],
+      "id": "00255646-9133-4398-8dba-e1888087e8f6",
+      "name": "Set Rejection Status"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3294e0a1-016c-4a50-b056-cbfe5f536814",
+              "name": "dedupeKey",
+              "value": "={{ $json.email.trim().toLowerCase() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        864,
+        -240
+      ],
+      "id": "9e3aeb6a-a6b7-4531-af3a-e20e84b65b8a",
+      "name": "Build Deduplication Key"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "98CwE3zWg6FnRIP0",
+          "mode": "list",
+          "cachedResultName": "lead_registry",
+          "cachedResultUrl": "/projects/ZTXg2b0aaHstV9Fg/datatables/98CwE3zWg6FnRIP0"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "dedupeKey",
+              "condition": "ilike",
+              "keyValue": "={{ $json.dedupeKey }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        -304
+      ],
+      "id": "5ef50ab4-dd34-4398-acc3-4827a41e4c3d",
+      "name": "Check Existing Lead",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "98CwE3zWg6FnRIP0",
+          "mode": "list",
+          "cachedResultName": "lead_registry",
+          "cachedResultUrl": "/projects/ZTXg2b0aaHstV9Fg/datatables/98CwE3zWg6FnRIP0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dedupeKey": "={{ $('Build Deduplication Key').item.json.dedupeKey }}",
+            "email": "={{ $('Build Deduplication Key').item.json.email }}",
+            "company": "={{ $('Build Deduplication Key').item.json.company }}",
+            "correlationId": "={{ $('Build Deduplication Key').item.json.correlationId }}",
+            "crmStatus": "PENDING_CRM"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dedupeKey",
+              "displayName": "dedupeKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "correlationId",
+              "displayName": "correlationId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "crmStatus",
+              "displayName": "crmStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        96
+      ],
+      "id": "cc41b23d-d3a4-4762-84af-81df5f2cecd8",
+      "name": "Register New Lead"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c797b445-f8aa-4a0e-9491-71e9f9e758bc",
+              "name": "deduplicationStatus",
+              "value": "DUPLICATE",
+              "type": "string"
+            },
+            {
+              "id": "bdd78b25-7fbd-46ed-86eb-01a3743c0e9e",
+              "name": "deduplicationMessage",
+              "value": "Lead already exists; CRM creation skipped",
+              "type": "string"
+            },
+            {
+              "id": "12039226-b8da-4045-9810-4b09ac0e186c",
+              "name": "crmStatus",
+              "value": "SKIPPED_DUPLICATE",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1456,
+        -160
+      ],
+      "id": "c35839e8-5c03-4f7f-91dc-c7b08cf3a953",
+      "name": "Set Duplicate Status"
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "email": "={{ $('Build Deduplication Key').item.json.email }}",
+        "additionalFields": {
+          "companyName": "={{ $('Build Deduplication Key').item.json.company }}",
+          "country": "={{ $('Build Deduplication Key').item.json.country }}",
+          "firstName": "={{ $('Build Deduplication Key').item.json.firstName }}",
+          "jobTitle": "={{ $('Build Deduplication Key').item.json.jobTitle }}",
+          "lastName": "={{ $('Build Deduplication Key').item.json.lastName }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1552,
+        96
+      ],
+      "id": "f78b4696-b146-48c3-b193-c476919a1554",
+      "name": "Create or update a contact",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "x7suAjh5YhE15BHU",
+          "name": "HubSpot Service Key account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "Ig6ee8YXQzldBcap",
+          "mode": "list",
+          "cachedResultName": "crm_failed_leads",
+          "cachedResultUrl": "/projects/ZTXg2b0aaHstV9Fg/datatables/Ig6ee8YXQzldBcap"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "correlationId": "={{ $json.correlationId }}",
+            "email": "={{ $json.email }}",
+            "company": "={{ $json.company }}",
+            "crmError": "={{ $json.crmError }}",
+            "retryStatus": "OPEN",
+            "retryCount": 3
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "correlationId",
+              "displayName": "correlationId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "crmError",
+              "displayName": "crmError",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "retryStatus",
+              "displayName": "retryStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "retryCount",
+              "displayName": "retryCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "optimizeBulk": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        256
+      ],
+      "id": "ab78aab5-00d7-4307-8112-e04f3fab3e5c",
+      "name": "Send to CRM Dead Letter Queue",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "98CwE3zWg6FnRIP0",
+          "mode": "list",
+          "cachedResultName": "lead_registry",
+          "cachedResultUrl": "/projects/ZTXg2b0aaHstV9Fg/datatables/98CwE3zWg6FnRIP0"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "correlationId",
+              "keyValue": "={{ $('Build Deduplication Key').item.json.correlationId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hubspotContactId": "={{ $json.vid || $json.id }}",
+            "crmStatus": "SYNCED"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dedupeKey",
+              "displayName": "dedupeKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "correlationId",
+              "displayName": "correlationId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "crmStatus",
+              "displayName": "crmStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "hubspotContactId",
+              "displayName": "hubspotContactId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "crmError",
+              "displayName": "crmError",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1824,
+        0
+      ],
+      "id": "892b16f7-205b-4dfd-ad79-3f64122fb36d",
+      "name": "Mark CRM Sync Success"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "98CwE3zWg6FnRIP0",
+          "mode": "list",
+          "cachedResultName": "lead_registry",
+          "cachedResultUrl": "/projects/ZTXg2b0aaHstV9Fg/datatables/98CwE3zWg6FnRIP0"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "correlationId",
+              "keyValue": "={{ $('Build Deduplication Key').item.json.correlationId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "crmStatus": "FAILED_CRM",
+            "crmError": "={{\n  typeof $json.error === 'string'\n    ? $json.error\n    : ($json.error?.message || $json.message || 'HubSpot sync failed')\n}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dedupeKey",
+              "displayName": "dedupeKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "correlationId",
+              "displayName": "correlationId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "crmStatus",
+              "displayName": "crmStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "hubspotContactId",
+              "displayName": "hubspotContactId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "crmError",
+              "displayName": "crmError",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1776,
+        272
+      ],
+      "id": "cef8acd2-6022-42a3-93ae-52e3e33fa213",
+      "name": "Mark CRM Sync Failed"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d3bcf1f3-1667-42bb-8581-9d082ffa5357",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        -192
+      ],
+      "id": "9cf3f572-d620-444c-9846-b3f510913831",
+      "name": "Lead Already Exists?"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Payload": {
+      "main": [
+        [
+          {
+            "node": "Validate Required Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Required Fields": {
+      "main": [
+        [
+          {
+            "node": "Set Validation Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Rejection Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Validation Status": {
+      "main": [
+        [
+          {
+            "node": "Build Deduplication Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Deduplication Key": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Lead": {
+      "main": [
+        [
+          {
+            "node": "Lead Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register New Lead": {
+      "main": [
+        [
+          {
+            "node": "Create or update a contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create or update a contact": {
+      "main": [
+        [
+          {
+            "node": "Mark CRM Sync Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark CRM Sync Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark CRM Sync Failed": {
+      "main": [
+        [
+          {
+            "node": "Send to CRM Dead Letter Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Set Duplicate Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Register New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "8ed541f7-5bc7-48e8-bc15-fc482caa06b9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a34db62bebfd6df830fb7dbafe93af4593662d81835353764c1d5bbe6da1616"
+  },
+  "nodeGroups": [],
+  "id": "qmeZ6PhCzSPjaPYX",
+  "tags": []
+}
